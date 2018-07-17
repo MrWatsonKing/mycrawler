@@ -1,2 +1,2 @@
 # mysurfer
-A simple cpp crawler.
+A simple cpp spider.
