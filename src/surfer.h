@@ -4,9 +4,12 @@
 #include <netdb.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <string>
 #include <strings.h>
 #include <iostream>
+#include <fstream>
 using namespace std;
 
 //引用自网络 https://blog.csdn.net/orthocenterchocolate/article/details/38665937
