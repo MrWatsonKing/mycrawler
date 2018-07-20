@@ -11,18 +11,18 @@
 #include <iostream>
 #include <fstream>
 #include <list>
+#include <vector>
 #include <algorithm>
 using namespace std;
+#define defDownPath "/home/king/vscode/mysurfer/download"
 
-//引用自网络 https://blog.csdn.net/orthocenterchocolate/article/details/38665937
-void parseHostAndPagePath(const string url, string &hostUrl, string &pagePath);
-string getWebPage(const string &url); //局部变量只能返回值 不能返回引用
-
-//原创
-void parseWebPage(const string &pageContent);
+int connectHost(const string &url);
+string getWebPage(int sfd,const string &url); //局部变量只能返回值 不能返回引用
+void drawResources(int sfd,const string &pageContent);
+void parseHostAndPagePath(const string &url, string &hostUrl, string &pagePath);
 list<string> getHttps(const string &pageContent,const char* type="images");
-void writeLocalFile(const string &content,const string &filename,const string &downpath=string("/home/king/vscode/mysurfer/download"));
-void writeLocalFile(const list<string> &strlist,const string &filename,const string &downpath=string("/home/king/vscode/mysurfer/download"));
-
+void writeLocalFile(const string &content,const string &filename,const string &downpath=defDownPath);
+void writeLocalFile(const list<string> &strlist,const string &filename,const string &downpath=defDownPath);
+void writeLocalFile(const vector<char> &vbytes,const string &filename,const string &downpath=defDownPath);
 
 #endif //SURFER_H

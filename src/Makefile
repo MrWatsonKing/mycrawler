@@ -1,4 +1,4 @@
-crawler:
+surfer:
 	g++ -std=c++17 *.cpp -o ../surf
 
 clean:
