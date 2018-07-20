@@ -24,7 +24,7 @@ void parseHostAndPagePath(const string url, string &hostUrl, string &pagePath){
 }
 
 //获取网页
-bool getWebPage(const string &url){
+string getWebPage(const string &url){
     struct hostent *host;
     string hostUrl, pagePath;
     //将url解析为 主机名 和 网页路径
@@ -54,7 +54,7 @@ bool getWebPage(const string &url){
     string requestHeader;
     requestHeader="GET "+pagePath+" HTTP/1.1\r\n";
     requestHeader+="Host: "+hostUrl+"\r\n";
-    requestHeader+="Accept: */*\r\n";
+    requestHeader+="Accept: html/text\r\n";
     requestHeader+="User-Agent: Mozilla/5.0\r\n";
     requestHeader+="connection:Keep-Alive\r\n";
     requestHeader+="\r\n";
@@ -74,21 +74,6 @@ bool getWebPage(const string &url){
     struct timeval timeout={1,0};
     setsockopt(isock, SOL_SOCKET, SO_RCVTIMEO, (void *)&timeout, sizeof(struct timeval));
 
-    // char c;
-    // bool flag=true;
-    // //这里是干嘛？
-    // while(recv(isock, &c, 1, 0)>0){
-    //     if('\r'==c){
-    //         continue;
-    //     }else if('\n'==c){
-    //         if(false==flag)
-    //             break;
-    //         flag=false;
-    //     }else{
-    //         flag=true;
-    //     }
-    // }
- 
     int len, BUFFER_SIZE=1024;
     char buffer[BUFFER_SIZE];
     string pageContent="";
@@ -97,34 +82,59 @@ bool getWebPage(const string &url){
         buffer[len]='\0';
         pageContent+=buffer;
     }
-    cout << pageContent << endl;
+
     close(isock);
+    return pageContent;
+}
 
-    //检查下载路径 若不存在 则创建之
-    char cwd[128] = {0};
-    string downPath = getcwd(cwd,128);
-    downPath += "/download";
-    if(access(downPath.c_str(),R_OK|W_OK|X_OK) == -1){
-        if(mkdir(downPath.c_str(),0777) == -1){
-            perror("mkdir error");
-            exit(-1);
-        }else
-			printf("dir created OK:%s\n",downPath.c_str());
+void parseWebPage(const string &pageContent){
+    //去除非网页内容的http协议头
+    string content = pageContent.substr(pageContent.find("<html>"));
+    //将网页内容写入本地文本
+    writeLocalFile(content,"www.baidu.com_index.html");
+    //获取页面内容中的https     
+    list<string> url_list = getHttps(content); 
+    writeLocalFile(url_list,"www.baidu.com_imageURLs.txt");    
+}
+
+//后续可以追加分类处理
+list<string> getHttps(const string &pageContent,const char* type/*="images"*/){
+    list<string> url_list;
+    int begin=0,end=0,b1=0,e1=0;
+    string url;
+    while(true){
+        begin = pageContent.find("url(http",begin);
+        if(begin == -1) break;
+        end = pageContent.find(")",begin);
+        url = pageContent.substr(begin+4,end-begin-4);
+        url.erase(remove(url.begin(),url.end(),'\\'),url.end());
+        url_list.push_back(url);
+        begin = end+1;
     }
+    return url_list;
+}
 
-    //hostUrl不带/ pagePath以/开头
-    downPath += (pagePath.size()==1 ? "/"+hostUrl:pagePath)+".html";
-    //cout << downPath << endl;
-    ofstream outfile(downPath,fstream::out);
+void writeLocalFile(const string &content,const string &filename,const string &downpath/*=string("/home/king/vscode/mysurfer/download")*/){
+    string filepath = downpath + '/' + filename;
+    ofstream outfile(filepath,fstream::out);
     if(!outfile.is_open()){
         cout << "file open error\n";
         outfile.close();
         exit(-1);
     }
-    outfile << pageContent;
+    outfile << content << endl;
     outfile.close();
+}
 
-
-
-    return true;
+void writeLocalFile(const list<string> &strlist,const string &filename,const string &downpath/*=string("/home/king/vscode/mysurfer/download")*/){
+    string filepath = downpath + '/' + filename;
+    ofstream outfile(filepath,fstream::out);
+    if(!outfile.is_open()){
+        cout << "file open error\n";
+        outfile.close();
+        exit(-1);
+    }
+    for(auto str:strlist)
+        outfile << str << endl;
+    outfile.close();
 }
