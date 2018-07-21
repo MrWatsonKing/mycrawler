@@ -34,9 +34,9 @@ int main(int argc, char const *argv[])
     int sfd = connectHost(url);
     if(sfd ==-1) exit(-1);
     //发送请求并获取页面内容
-    string pageContent = getWebPage(sfd,url);
+    vector<char> vcontent = getWebPage(sfd,url);
     //提取页面数据中的有效信息 写入本地文件，并提取其中的资源地址 写入本地文件
-    drawResources(sfd,pageContent); 
+    drawResources(sfd,vcontent); 
     //断开连接
     close(sfd);
     

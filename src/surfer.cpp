@@ -34,7 +34,7 @@ int connectHost(const string &url){
 }
 
 //获取网页
-string getWebPage(int sfd,const string &url){
+vector<char> getWebPage(int sfd,const string &url){
     struct hostent *host;
     string hostUrl, pagePath;
     //将url解析为 主机名 和 网页路径
@@ -68,32 +68,41 @@ string getWebPage(int sfd,const string &url){
     //接收应答消息
     int len, BUFFER_SIZE=1024;
     char buffer[BUFFER_SIZE];
-    string pageContent="";
+    vector<char> vbytes;
+    vector<char> vcontent;
     while((len = recv(sfd, buffer, BUFFER_SIZE-1, 0))>0){
-        //recv或read函数并不会追加\0,所以需要我们手动添加\0，以便生成完整有效的字符串
-        buffer[len] = '\0';
-        pageContent += buffer;
+        for(int i=0;i<len;i++)
+            vbytes.push_back(buffer[i]);
     }
     //去除非网页内容的http协议头
-    int posC = pageContent.find("\r\n\r\n")+4;    
-    pageContent= pageContent.substr(posC);
+    bool bcopy = false;
+    for(int i=4;i<vbytes.size();i++){
+        if(vbytes[i-4]=='\r' && vbytes[i-3]=='\n' && vbytes[i-2]=='\r' && vbytes[i-1]=='\n')
+            bcopy = true;
+        if(bcopy)
+            vcontent.push_back(vbytes[i]);
+    }
     //如果不是html 就生成本地文件 文件名为
     if(requestHeader.find("html")==-1)
-        writeLocalFile(pageContent,pagePath.substr(pagePath.rfind("/")+1),g_downPath);
+        writeLocalFile(vcontent,pagePath.substr(pagePath.rfind("/")+1),g_downPath);
 
-    return pageContent;
+    return vcontent;
 }
 
 //抽取网页资源
-void drawResources(int sfd,const string &pageContent){
+void drawResources(int sfd,const vector<char> &vcontent){
     //将网页内容写入本地文本
     // writeLocalFile(pageContent,"www.baidu.com_index.html",g_downPath);
     //获取页面内容中的https     
-    list<string> url_list = getHttps(pageContent); 
-    //将资源链接列表输出到本地txt文档
+    list<string> url_list = getHttps(vcontent); 
+    //将资源链接列表输出到本地txt文档`
     writeLocalFile(url_list,"url_list.txt",g_downPath);
-    for(auto url:url_list)
+    int cnt=0;
+    for(auto url:url_list){
+        cnt++;
+        cout << "downloading file "<< cnt << ": "<< url << endl;
         getWebPage(sfd,url);
+    }
 }
 
 //网址解析
@@ -120,10 +129,12 @@ void parseHostAndPagePath(const string& url, string &hostUrl, string &pagePath){
 }
 
 //后续可以追加资源类型标签 分类获取不同类型的资源地址
-list<string> getHttps(const string &pageContent,const char* type/*="images"*/){
+list<string> getHttps(const vector<char> &vcontent,const char* type/*="images"*/){
     list<string> url_list;
     int begin=0,end=0,b1=0,e1=0;
-    string url;
+    string url,pageContent;
+    for(int i=0;i<vcontent.size();i++)
+        pageContent.push_back(vcontent[i]);
     int cnt = 0;
     while(true){
         begin = pageContent.find("url(http",begin);
@@ -164,5 +175,21 @@ void writeLocalFile(const list<string> &strlist,const string &filename,const str
     }
     for(auto str:strlist)
         outfile << str << endl;
+    outfile.close();
+}
+
+void writeLocalFile(const vector<char> &vcontent,const string &filename,const string &downpath/*=defDownPath*/){
+    string filepath = downpath + '/' + filename;
+    ofstream outfile(filepath,fstream::out|fstream::binary);
+    if(!outfile.is_open()){
+        cout << "file open error\n";
+        outfile.close();
+        exit(-1);
+    }
+    // outfile << vcontent.data(); 
+    //不能转换成char*或者string来输出 因为char*或string默认以\0结束 所得文件将不完整
+    //图片格式中包含的\0都是有意义的，一个都不能少
+    for(int i=0;i<vcontent.size();i++)
+        outfile << vcontent[i];
     outfile.close();
 }
