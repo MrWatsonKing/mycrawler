@@ -74,15 +74,20 @@ vector<char> getWebPage(int sfd,const string &url){
         for(int i=0;i<len;i++)
             vbytes.push_back(buffer[i]);
     }
+	//包含协议头的完整数据 写入本地文件
+	//writeLocalFile(vbytes,url+"_full.txt",g_downPath);
+	
     //去除非网页内容的http协议头
-    bool bcopy = false;
-    for(int i=4;i<vbytes.size();i++){
+    int i=0;
+	for(i=4;i<vbytes.size();i++)
         if(vbytes[i-4]=='\r' && vbytes[i-3]=='\n' && vbytes[i-2]=='\r' && vbytes[i-1]=='\n')
-            bcopy = true;
-        if(bcopy)
-            vcontent.push_back(vbytes[i]);
-    }
-    //如果不是html 就生成本地文件 文件名为
+			break;
+	vcontent.insert(vcontent.end(),vbytes.begin()+i,vbytes.end());
+	//去除协议头的完整数据 再写入本地文件
+	//经过对比测试 证明以上去除http协议头的语句完全正确
+	writeLocalFile(vcontent,url+".txt",g_downPath);
+
+	//如果不是html 就生成本地文件 文件名为
     if(requestHeader.find("html")==-1)
         writeLocalFile(vcontent,pagePath.substr(pagePath.rfind("/")+1),g_downPath);
 
@@ -186,10 +191,9 @@ void writeLocalFile(const vector<char> &vcontent,const string &filename,const st
         outfile.close();
         exit(-1);
     }
-    // outfile << vcontent.data(); 
-    //不能转换成char*或者string来输出 因为char*或string默认以\0结束 所得文件将不完整
     //图片格式中包含的\0都是有意义的，一个都不能少
     for(int i=0;i<vcontent.size();i++)
         outfile << vcontent[i];
     outfile.close();
+	cout << "created file: " << filepath << endl;
 }

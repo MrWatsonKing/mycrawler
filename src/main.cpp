@@ -33,10 +33,10 @@ int main(int argc, char const *argv[])
     //连接主机
     int sfd = connectHost(url);
     if(sfd ==-1) exit(-1);
-    //发送请求并获取页面内容
+    //发送请求并获取应答  如果是image内容就写入本地 text/html就啥也不干
     vector<char> vcontent = getWebPage(sfd,url);
-    //提取页面数据中的有效信息 写入本地文件，并提取其中的资源地址 写入本地文件
-    drawResources(sfd,vcontent); 
+    //从html中抽取url_list，并循环请求获取url_list指向的资源
+    //drawResources(sfd,vcontent);
     //断开连接
     close(sfd);
     
