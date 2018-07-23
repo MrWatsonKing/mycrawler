@@ -80,13 +80,13 @@ vector<char> getWebPage(int sfd,const string &url){
     //去除非网页内容的http协议头
     int i=0;
 	for(i=4;i<vbytes.size();i++)
-        if(vbytes[i-4]=='\r' && vbytes[i-3]=='\n' && vbytes[i-2]=='\r' && vbytes[i-1]=='\n')
+		if(vbytes[i-4]=='\r' && vbytes[i-3]=='\n' && vbytes[i-2]=='\r' && vbytes[i-1]=='\n')
 			break;
 	vcontent.insert(vcontent.end(),vbytes.begin()+i,vbytes.end());
 	//去除协议头的完整数据 再写入本地文件
 	//经过对比测试 证明以上去除http协议头的语句完全正确
 	writeLocalFile(vcontent,url+".txt",g_downPath);
-
+	
 	//如果不是html 就生成本地文件 文件名为
     if(requestHeader.find("html")==-1)
         writeLocalFile(vcontent,pagePath.substr(pagePath.rfind("/")+1),g_downPath);
