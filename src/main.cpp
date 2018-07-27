@@ -1,6 +1,7 @@
 #include "surfer.h"
 string g_downPath;
 
+
 int main(int argc, char const *argv[])
 {
     while(char ret = getopt(argc,(char*const*)argv,"h")){
@@ -16,7 +17,7 @@ int main(int argc, char const *argv[])
         cout << "usage: surf <url>" << endl;
         return -1;
     }
-    string url(argv[1]);
+    string url(argv[1]);    
     
     //检查下载路径 若不存在 则创建之
     char cwd[128] = {0};
@@ -36,9 +37,10 @@ int main(int argc, char const *argv[])
     //发送请求并获取应答  如果是image内容就写入本地 text/html就啥也不干
     vector<char> vcontent = getWebPage(sfd,url);
     //从html中抽取url_list，并循环请求获取url_list指向的资源
-    //drawResources(sfd,vcontent);
+    drawResources(sfd,vcontent);
     //断开连接
     close(sfd);
     
+    cout << "surfing finished." << endl;
     return 0;
 }

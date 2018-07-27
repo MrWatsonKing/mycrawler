@@ -23,6 +23,6 @@ void parseHostAndPagePath(const string &url, string &hostUrl, string &pagePath);
 list<string> getHttps(const vector<char> &vcontent,const char* type="images");
 void writeLocalFile(const string &content,const string &filename,const string &downpath=defDownPath);
 void writeLocalFile(const list<string> &strlist,const string &filename,const string &downpath=defDownPath);
-void writeLocalFile(const vector<char> &vcontent,const string &filename,const string &downpath=defDownPath);
+void writeLocalFile(const vector<char> &vcontent,const string &filename,const string &downpath=defDownPath,const char* prefix="");
 
 #endif //SURFER_H
