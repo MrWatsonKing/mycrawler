@@ -149,7 +149,7 @@ vector<char> getWebPage(int sfd,const string &url){
     //得到内容
 	vcontent.insert(vcontent.end(),vbytes.begin()+i,vbytes.end());
 	
-    //如果是网页内容 就在本地生成网页文件
+    //如果是网页内容 就在本地生成网页文件 包括html或shtml
     if(requestHeader.find("html") != np){
         //去除<!doctype html>前面和后面可能存在的数字
         if(vcontent.size()>=10){
@@ -169,6 +169,7 @@ vector<char> getWebPage(int sfd,const string &url){
         }else
             return vbytes;       
 
+        //将文件名中的/替换为.
         string pageName = hostUrl+pagePath;
         size_t b=0, p=0;
         if(pageName.find("/") != np)            
@@ -178,7 +179,7 @@ vector<char> getWebPage(int sfd,const string &url){
                 pageName.replace(b,1,".");
                 p = b+1;
             }            
-        cout << "pageName: " << pageName << endl;
+        //cout << "pageName: " << pageName << endl;
 
         //将网页写入本地
         //请求.shtml时 pageName以.shtml结尾
