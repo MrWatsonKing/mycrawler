@@ -84,9 +84,13 @@ vector<char> getWebPage(int sfd,const string &url){
 
 	//将http协议头和网页内容分离
     int i=0;
-	for(i=4;i<vbytes.size();i++)
-		if(vbytes[i-4]=='\r' && vbytes[i-3]=='\n' && vbytes[i-2]=='\r' && vbytes[i-1]=='\n')
-			break;
+    if(vbytes.size()>=4){
+    	for(i=4;i<vbytes.size();i++)
+	    	if(vbytes[i-4]=='\r' && vbytes[i-3]=='\n' && vbytes[i-2]=='\r' && vbytes[i-1]=='\n')
+		    	break;
+    }else
+        return vbytes;
+
     //得到http协议头 并根据解析结果分别处理
     vhttpHead.insert(vhttpHead.end(),vbytes.begin(),vbytes.begin()+i-1);
     string httpHead = vhttpHead.data();
@@ -126,8 +130,8 @@ vector<char> getWebPage(int sfd,const string &url){
     //如果网页返回错误代码 输出查看当前httpHead 并返回
     if(general.find("200") == np){
         cout << "\t" << "resource not found !" << endl;
-        cout << "\t" << general << endl;
-        cout << server << (server.size()>0 ? "\n\t":"");
+        cout << "\t" << general << endl; //general是肯定存在的 后面的项目不一定存在
+        cout << "\t" << server << (server.size()>0 ? "\n\t":"");
         cout << date << (date.size()>0 ? "\n\t":"");
         cout << contentType << (contentType.size()>0 ? "\n\t":"");
         cout << contentLength << (contentLength.size()>0 ? "\n\t":"");
@@ -143,14 +147,23 @@ vector<char> getWebPage(int sfd,const string &url){
     //如果是网页内容 就在本地生成网页文件
     if(requestHeader.find("html") != np){
         //去除<!doctype html>前面和后面可能存在的数字
-        for(i=0;i<10;i++)
-            if(vcontent[i]=='<') break;
-        vcontent.erase(vcontent.begin(),vcontent.begin()+i);
-        int size = vcontent.size();
-        for(i=0;i<10;i++)
-            if(vcontent[size-1-i]=='>') break;
-        for(int j=0;j<i;j++)
-            vcontent.pop_back();
+        if(vcontent.size()>=10){
+            for(i=0;i<10;i++)
+                if(vcontent[i]=='<'){
+                    vcontent.erase(vcontent.begin(),vcontent.begin()+i);
+                    break;
+                }
+            int size = vcontent.size();
+            for(i=0;i<10;i++)
+                if(vcontent[size-1-i]=='>'){
+                    for(int j=0;j<i;j++)
+                        vcontent.pop_back();
+                    break;
+                }
+        //极端情况下 vbytes.size()<10，就直接退出            
+        }else
+            return vbytes;        
+        
         //将网页写入本地
         writeLocalFile(vcontent,url+".html",g_downPath);
     }
