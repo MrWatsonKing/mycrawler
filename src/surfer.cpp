@@ -42,7 +42,10 @@ vector<char> getWebPage(int sfd,const string &url){
     struct hostent *host;
     string hostUrl, pagePath;
     //将url解析为 主机名 和 网页路径
-    parseHostAndPagePath(url, hostUrl, pagePath);    
+    parseHostAndPagePath(url, hostUrl, pagePath);
+    //对"www.baidu.com"将不会进行处理
+    //hostUrl = "www.baidu.com"
+    //pagePath = "/"    
     
     //创建https协议请求头 pagePath以/开头 hostUrl==www.baidu.com或baidu.com
     string requestHeader;
@@ -55,6 +58,8 @@ vector<char> getWebPage(int sfd,const string &url){
         requestHeader += "Accept: image/jpg\r\n";
     else if((pos=pagePath.find(".gif")) != np)
         requestHeader += "Accept: image/gif\r\n";
+    else if((pos=pagePath.find(".shtml")) != np)
+        requestHeader += "Accept: text/shtml\r\n";
     else
         requestHeader += "Accept: text/html\r\n";
     requestHeader += "User-Agent: Mozilla/5.0\r\n";
@@ -63,7 +68,7 @@ vector<char> getWebPage(int sfd,const string &url){
      
     //发送协议头
     if(send(sfd, requestHeader.c_str(), requestHeader.size(), 0)==-1){
-        cout<<"send error\n"<<endl;
+        cout<<"requestHeader send error\n"<<endl;
         exit(1);
     }
     //设置socket选项
@@ -162,12 +167,31 @@ vector<char> getWebPage(int sfd,const string &url){
                 }
         //极端情况下 vbytes.size()<10，就直接退出            
         }else
-            return vbytes;        
-        
+            return vbytes;       
+
+        string pageName = hostUrl+pagePath;
+        size_t b=0, p=0;
+        if(pageName.find("/") != np)            
+            while(true){
+                b = pageName.find("/",p);
+                if(b == np) break;
+                pageName.replace(b,1,".");
+                p = b+1;
+            }            
+        cout << "pageName: " << pageName << endl;
+
         //将网页写入本地
-        writeLocalFile(vcontent,url+".html",g_downPath);
+        //请求.shtml时 pageName以.shtml结尾
+        if(requestHeader.find("shtml") != np)
+            writeLocalFile(vcontent,pageName,g_downPath);
+        //找不到shtml 就是普通网页 以.html结尾  或 没有结尾
+        else{
+            if(pageName.find(".html") == np)
+                writeLocalFile(vcontent,pageName+".html",g_downPath);
+            else
+                writeLocalFile(vcontent,pageName,g_downPath);
+        }        
     }
-        
 	//如果不是html 就生成本地文件 文件名为
     else{
         //检查对应文件夹是否存在 若不存在 则创建之
