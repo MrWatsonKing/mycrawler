@@ -1,5 +1,5 @@
 #include "surfer.h"
-string g_downPath;
+string g_downPath; 
 
 
 int main(int argc, char const *argv[])
@@ -34,7 +34,7 @@ int main(int argc, char const *argv[])
     //连接主机
     int sfd = connectHost(url);
     if(sfd ==-1) exit(-1);
-    //发送请求并获取应答  如果是image内容就写入本地 text/html就啥也不干
+    //发送请求并获取应答  不论是网页还是资源 都会在本地生成
     vector<char> vcontent = getWebPage(sfd,url);
     //从html中抽取url_list，并循环请求获取url_list指向的资源
     drawResources(sfd,vcontent);

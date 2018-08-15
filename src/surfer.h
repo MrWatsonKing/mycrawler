@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string>
+#include <regex>
 #include <strings.h>
 #include <iostream>
 #include <fstream>

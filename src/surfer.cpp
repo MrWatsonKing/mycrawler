@@ -187,13 +187,13 @@ vector<char> getWebPage(int sfd,const string &url){
             writeLocalFile(vcontent,pageName,g_downPath);
         //找不到shtml 就是普通网页 以.html结尾  或 没有结尾
         else{
-            if(pageName.find(".html") == np)
-                writeLocalFile(vcontent,pageName+".html",g_downPath);
-            else
+            if(pageName.find("html") == np) //pagePath = /
+                writeLocalFile(vcontent,pageName+"html",g_downPath);
+            else //pagePa = xxx.html
                 writeLocalFile(vcontent,pageName,g_downPath);
         }        
     }
-	//如果不是html 就生成本地文件 文件名为
+	//如果不是html 就生成本地文件 文件名为对应的资源文件名
     else{
         //检查对应文件夹是否存在 若不存在 则创建之
         string downPath = g_downPath + "/" + host_now;
@@ -212,7 +212,7 @@ vector<char> getWebPage(int sfd,const string &url){
             filename = filename.substr(filename.rfind("=")+1);
 
         writeLocalFile(vcontent,filename,downPath,"\t");
-    }        
+    }                
 
     return vcontent;
 }
@@ -265,13 +265,17 @@ void parseHostAndPagePath(const string& url, string &hostUrl, string &pagePath){
 
 //后续可以追加资源类型标签 分类获取不同类型的资源地址
 list<string> getHttps(const vector<char> &vcontent,const char* type/*="images"*/){
-    list<string> url_list;
-    size_t begin=0,end=0,b1=0,e1=0;
+
     string url,pageContent;
     for(int i=0;i<vcontent.size();i++)
-        pageContent.push_back(vcontent[i]);
+        if(vcontent[i] != '\0')
+            pageContent.push_back(vcontent[i]);
 
+    list<string> url_list;
+    size_t begin=0,end=0;
     int cnt = 0;
+
+#if 0    
     while(true){
         begin = pageContent.find("url(",begin);
         if(begin == np) break;
@@ -297,6 +301,62 @@ list<string> getHttps(const vector<char> &vcontent,const char* type/*="images"*/
         cnt = 0;
         begin = end+1;
     }
+#else
+    //按第一种规则查找超链接
+    // regex reg("<!.*?>"); //解析注释    
+    // regex reg("href=\\\".*?\\\""); //解析href超链接
+    regex reg("url\\((.*?)\\)"); //解析url()资源地址
+    sregex_iterator spos(pageContent.cbegin(),pageContent.cend(),reg);
+    sregex_iterator send;
+    for(;spos!=send;spos++){
+        //cout << spos->str() << endl; //全匹配
+        url = spos->str(1); //第一个分组
+        //去除url字符串中的'\'符号
+        url.erase(remove(url.begin(),url.end(),'\\'),url.end());
+        //去除url字符串中的‘
+        url.erase(remove(url.begin(),url.end(),'\''),url.end());
+        //去除不包含//的地址类型，如：#default#homepage
+        if(url.find("//") == np)
+            continue;         
+        //保留//之后的地址
+        url = url.substr(url.find("//")+2);        
+        //排除重复元素
+        for(auto elmt:url_list)
+            if(elmt == url) cnt++;
+        if(cnt==0){
+            url_list.push_back(url);
+            // cout << url << endl;
+        }            
+        //重置重复计数cnt和查找位置begin
+        cnt = 0;
+    }
+    //按第二种规则查找超链接
+    regex reg1("<img.*?src=\\\"(.*?)\\\""); //解析<img src="">资源地址
+    sregex_iterator spos1(pageContent.cbegin(),pageContent.cend(),reg1);
+    for(;spos1!=send;spos1++){
+        //cout << spos->str() << endl; //全匹配
+        url = spos1->str(1); //第一个分组
+        //去除url字符串中的'\'符号
+        url.erase(remove(url.begin(),url.end(),'\\'),url.end());
+        //去除url字符串中的‘
+        url.erase(remove(url.begin(),url.end(),'\''),url.end());
+        //去除不包含//的地址类型，如：#default#homepage
+        if(url.find("//") == np)
+            continue;
+        //保留//之后的地址
+        url = url.substr(url.find("//")+2);        
+        //排除重复元素
+        for(auto elmt:url_list)
+            if(elmt == url) cnt++;
+        if(cnt==0){
+            url_list.push_back(url);
+            // cout << url << endl;
+        }            
+        //重置重复计数cnt和查找位置begin
+        cnt = 0;
+    }
+#endif
+
     return url_list;
 }
 
