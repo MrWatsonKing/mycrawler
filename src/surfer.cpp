@@ -1,6 +1,6 @@
 #include "surfer.h"
 extern string g_downPath;
-string host_now;
+extern string host_now;
 const size_t np = string::npos;
 
 //连接主机
@@ -12,9 +12,8 @@ int connectHost(const string &url){
     //通过主机名获取主机地址 失败则返回
     if(0==(host=gethostbyname(hostUrl.c_str()))){
         cout<<"gethostbyname error\n"<<endl;
-        exit(-1);
+        return -1;
     }
-    host_now = hostUrl;
 
     //创建ip地址结构体 并将主机ip地址拷贝过去
     struct sockaddr_in pin;
@@ -38,7 +37,21 @@ int connectHost(const string &url){
 }
 
 //获取网页
-vector<char> getWebPage(int sfd,const string &url){
+vector<char> getWebPage(const string &url){
+    //cout<<"\tthread_id: "<<this_thread::get_id()<<endl;
+    vector<char> vbytes;
+    int len, BUFFER_SIZE=1024;
+    char buffer[BUFFER_SIZE];    
+    vector<char> vcontent;
+    vector<char> vhttpHead;
+
+    //连接主机
+    int sfd = connectHost(url);
+    if(sfd ==-1){
+        close(sfd);
+        return vbytes;
+    }
+
     struct hostent *host;
     string hostUrl, pagePath;
     //将url解析为 主机名 和 网页路径
@@ -63,38 +76,39 @@ vector<char> getWebPage(int sfd,const string &url){
     else
         requestHeader += "Accept: text/html\r\n";
     requestHeader += "User-Agent: Mozilla/5.0\r\n";
-    requestHeader += "connection:Keep-Alive\r\n";
+    requestHeader += "connection:close\r\n";
     requestHeader += "\r\n";
      
     //发送协议头
     if(send(sfd, requestHeader.c_str(), requestHeader.size(), 0)==-1){
-        cout<<"requestHeader send error\n"<<endl;
-        exit(1);
+        cout<<"\tError: requestHeader send error!\n"<<endl;
+        return vbytes;
     }
     //设置socket选项
     struct timeval timeout={1,0};
     setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, (void *)&timeout, sizeof(struct timeval));
-    //接收应答消息
-    int len, BUFFER_SIZE=1024;
-    char buffer[BUFFER_SIZE];
-    vector<char> vbytes;
-    vector<char> vcontent;
-    vector<char> vhttpHead;
+    //接收应答消息    
     while((len = recv(sfd, buffer, BUFFER_SIZE-1, 0))>0){
         for(int i=0;i<len;i++)
             vbytes.push_back(buffer[i]);
     }
-	//包含协议头的完整数据 写入本地文件
-	//writeLocalFile(vbytes,url+"_full.html",g_downPath);
+    //断开连接
+    close(sfd);
 
+	//包含协议头的完整数据 写入本地文件
+	//writeLocalFile(vbytes,url+"_full.html",g_downPath); //可写入\0字符
+    
 	//将http协议头和网页内容分离
     int i=0;
     if(vbytes.size()>=4){
     	for(i=4;i<vbytes.size();i++)
 	    	if(vbytes[i-4]=='\r' && vbytes[i-3]=='\n' && vbytes[i-2]=='\r' && vbytes[i-1]=='\n')
 		    	break;
-    }else
+    }else{
+        cout << "\tError: reply.size()<4! download canceled." << endl;
+        cout << "\tbuffer size=" << vbytes.size() << endl << endl;
         return vbytes;
+    }
 
     //得到http协议头 并根据解析结果分别处理
     vhttpHead.insert(vhttpHead.end(),vbytes.begin(),vbytes.begin()+i-1);
@@ -133,8 +147,8 @@ vector<char> getWebPage(int sfd,const string &url){
         location = httpHead.substr(start,end-start);
     }
     //如果网页返回错误代码 输出查看当前httpHead 并返回
-    if(general.find("200") == np){
-        cout << "\t" << "resource not found !" << endl;
+    if(general.find("HTTP/1.1 200") == np){
+        cout << "\t" << "Error: resource not found! download canceled." << endl;
         cout << "\t" << general << endl; //general是肯定存在的 后面的项目不一定存在
         cout << "\t" << server << (server.size()>0 ? "\n\t":"");
         cout << date << (date.size()>0 ? "\n\t":"");
@@ -145,7 +159,6 @@ vector<char> getWebPage(int sfd,const string &url){
         //注意：三目表达式 涉及到类型不同的 或者前扩 或者全扩 编译器才能正确解析 否则会报错
         return vbytes;
     }
-
     //得到内容
 	vcontent.insert(vcontent.end(),vbytes.begin()+i,vbytes.end());
 	
@@ -166,8 +179,10 @@ vector<char> getWebPage(int sfd,const string &url){
                     break;
                 }
         //极端情况下 vbytes.size()<10，就直接退出            
-        }else
-            return vbytes;       
+        }else{
+            cout << "\tError: reply.size()<10! download canceled." << endl << endl;
+            return vbytes;
+        }                   
 
         //将文件名中的/替换为.
         string pageName = hostUrl+pagePath;
@@ -197,19 +212,22 @@ vector<char> getWebPage(int sfd,const string &url){
     else{
         //检查对应文件夹是否存在 若不存在 则创建之
         string downPath = g_downPath + "/" + host_now;
+        //多线程情况下 有可能多个线程都会尝试创建文件夹 但只有一个会创建成功
+        //其他线程创建文件夹虽然失败 但不应直接退出。如果确实文件夹都没有创建成功 后面写入文件时也会报错。
         if(access(downPath.c_str(),R_OK|W_OK|X_OK) == -1){
-            if(mkdir(downPath.c_str(),0777) == -1){
+            if(mkdir(downPath.c_str(),0777) == -1)
                 perror("mkdir error");
-                return vbytes;
-            }else
+            else  
                 printf("dir created OK:%s\n",downPath.c_str());
         }
-        //获取有效的文件名 如果存在%或= 都去除之
+        //获取有效的文件名 如果存在%或=或? 都去除之 保留特殊符号前面的字符
         string filename = pagePath.substr(pagePath.rfind("/")+1);
-        if(filename.find("%") != np)
-            filename = filename.substr(filename.rfind("%")+1);
+        if(filename.find("%%") != np)
+            filename = filename.substr(0,filename.rfind("%%"));
         if(filename.find("=") != np)
-            filename = filename.substr(filename.rfind("=")+1);
+            filename = filename.substr(0,filename.rfind("="));
+        if(filename.find("?") != np)
+            filename = filename.substr(0,filename.rfind("?"));
 
         writeLocalFile(vcontent,filename,downPath,"\t");
     }                
@@ -218,12 +236,9 @@ vector<char> getWebPage(int sfd,const string &url){
 }
 
 //抽取网页资源
-void drawResources(int sfd,const vector<char> &vcontent){
-    //将网页内容写入本地文本
-    // writeLocalFile(pageContent,"www.baidu.com_index.html",g_downPath);
+void drawResources(const vector<char> &vcontent){
     //获取页面内容中的https     
     list<string> url_list = getHttps(vcontent); 
-
     if(url_list.size() == 0){
         cout << "found no urls in \"" << host_now << "\"" << endl;
         return;
@@ -231,12 +246,37 @@ void drawResources(int sfd,const vector<char> &vcontent){
     //将资源链接列表输出到本地txt文档`
     writeLocalFile(url_list,"url_list.txt",g_downPath);
 
-    int cnt=0;
+    int cnt=0,nts = url_list.size();
+
+#if 1 //多线程 同步执行 函数结束前统一等待回收
+    //等待线程汇合 可以确保主线程和进程不会在其他线程没有完全结束之前就退出
+    thread vts[nts];
     for(auto url:url_list){
         cnt++;
-        cout << "downloading file "<< cnt << ": "<< url << endl;
-        getWebPage(sfd,url);
+        cout << "\tdownloading file "<< cnt << ": "<< url << endl;
+        //对线程数组的每一个元素进行赋值 thread创建的时候 线程函数会自动调用并运行
+        vts[cnt-1] = thread(getWebPage,url);
     }
+    //函数返回之前 同步等待所有的线程执行完毕
+    for(int i=0;i<nts;i++)
+        vts[i].join();
+#else //单线程 顺序执行
+    // //分离线程 
+    // //因为主线程提前退出 导致进程退出 从而导致其他线程还没有执行完就被销毁了 不可行
+    // for(auto url:url_list){
+    //     cnt++;
+    //     cout << "\tdownloading file "<< cnt << ": "<< url << endl;
+    //     //对线程数组的每一个元素进行赋值 thread创建的时候 线程函数会自动调用并运行
+    //     thread(getWebPage,url).detach();
+    // }
+    //单线程 顺序执行    
+    for(auto url:url_list){
+        cnt++;
+        cout << "\tdownloading file "<< cnt << ": "<< url << endl;
+        getWebPage(url);
+    }
+#endif
+
     cout << endl << "download over." << endl;
 }
 
@@ -330,6 +370,7 @@ list<string> getHttps(const vector<char> &vcontent,const char* type/*="images"*/
         //重置重复计数cnt和查找位置begin
         cnt = 0;
     }
+
     //按第二种规则查找超链接
     regex reg1("<img.*?src=\\\"(.*?)\\\""); //解析<img src="">资源地址
     sregex_iterator spos1(pageContent.cbegin(),pageContent.cend(),reg1);
@@ -366,10 +407,11 @@ void writeLocalFile(const string &content,const string &filename,const string &d
     if(!outfile.is_open()){
         cout << "file open error\n";
         outfile.close();
-        exit(-1);
+        return;
     }
     outfile << content;
     outfile.close();
+    cout << "created file: " << filepath << endl << endl;
 }
 
 void writeLocalFile(const list<string> &strlist,const string &filename,const string &downpath/*=defDownPath*/){
@@ -378,7 +420,7 @@ void writeLocalFile(const list<string> &strlist,const string &filename,const str
     if(!outfile.is_open()){
         cout << "file open error\n";
         outfile.close();
-        exit(-1);
+        return;
     }
     for(auto str:strlist)
         outfile << str << endl;
@@ -392,7 +434,7 @@ void writeLocalFile(const vector<char> &vcontent,const string &filename,const st
     if(!outfile.is_open()){
         cout << "file open error\n";
         outfile.close();
-        exit(-1);
+        return;
     }
     //图片格式中包含的\0都是有意义的，一个都不能少
     for(int i=0;i<vcontent.size();i++)

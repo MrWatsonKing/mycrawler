@@ -1,5 +1,5 @@
 surfer:
-	g++ -std=c++17 *.cpp -o ../surf
+	g++ -std=c++17 *.cpp -lpthread -o ../surf 
 
 clean:
 	rm *.o *.gch
