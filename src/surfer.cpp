@@ -96,7 +96,7 @@ vector<char> getWebPage(const string &url){
     close(sfd);
 
 	//包含协议头的完整数据 写入本地文件
-	//writeLocalFile(vbytes,url+"_full.html",g_downPath); //可写入\0字符
+	//writeLocalFile(vbytes,url+"_full.html","",g_downPath); //可写入\0字符
     
 	//将http协议头和网页内容分离
     int i=0;
@@ -162,6 +162,15 @@ vector<char> getWebPage(const string &url){
     //得到内容
 	vcontent.insert(vcontent.end(),vbytes.begin()+i,vbytes.end());
 	
+    //检查对应文件夹是否存在 若不存在 则创建之
+    string downPath = g_downPath + "/" + host_now;
+    if(access(downPath.c_str(),R_OK|W_OK|X_OK) == -1){
+        if(mkdir(downPath.c_str(),0777) == -1)
+            perror("mkdir error");
+        else  
+            printf("dir created OK:%s\n",downPath.c_str());
+    }
+
     //如果是网页内容 就在本地生成网页文件 包括html或shtml
     if(requestHeader.find("html") != np){
         //去除<!doctype html>前面和后面可能存在的数字
@@ -193,33 +202,22 @@ vector<char> getWebPage(const string &url){
                 if(b == np) break;
                 pageName.replace(b,1,".");
                 p = b+1;
-            }            
-        //cout << "pageName: " << pageName << endl;
-
+            }           
+        
         //将网页写入本地
         //请求.shtml时 pageName以.shtml结尾
         if(requestHeader.find("shtml") != np)
-            writeLocalFile(vcontent,pageName,g_downPath);
+            writeLocalFile(vcontent,pageName,"",downPath);
         //找不到shtml 就是普通网页 以.html结尾  或 没有结尾
         else{
-            if(pageName.find("html") == np) //pagePath = /
-                writeLocalFile(vcontent,pageName+"html",g_downPath);
-            else //pagePa = xxx.html
-                writeLocalFile(vcontent,pageName,g_downPath);
+            if(pageName.find("html") == np) //pagePath=/ 或xxx/ /都已经替换成.
+                writeLocalFile(vcontent,pageName+"html","",downPath);
+            else //pagePath = xxx.html
+                writeLocalFile(vcontent,pageName,"",downPath);
         }        
     }
 	//如果不是html 就生成本地文件 文件名为对应的资源文件名
-    else{
-        //检查对应文件夹是否存在 若不存在 则创建之
-        string downPath = g_downPath + "/" + host_now;
-        //多线程情况下 有可能多个线程都会尝试创建文件夹 但只有一个会创建成功
-        //其他线程创建文件夹虽然失败 但不应直接退出。如果确实文件夹都没有创建成功 后面写入文件时也会报错。
-        if(access(downPath.c_str(),R_OK|W_OK|X_OK) == -1){
-            if(mkdir(downPath.c_str(),0777) == -1)
-                perror("mkdir error");
-            else  
-                printf("dir created OK:%s\n",downPath.c_str());
-        }
+    else{        
         //获取有效的文件名 如果存在%或=或? 都去除之 保留特殊符号前面的字符
         string filename = pagePath.substr(pagePath.rfind("/")+1);
         if(filename.find("%%") != np)
@@ -229,7 +227,7 @@ vector<char> getWebPage(const string &url){
         if(filename.find("?") != np)
             filename = filename.substr(0,filename.rfind("?"));
 
-        writeLocalFile(vcontent,filename,downPath,"\t");
+        writeLocalFile(vcontent,filename,"\t",downPath);
     }                
 
     return vcontent;
@@ -244,7 +242,7 @@ void drawResources(const vector<char> &vcontent){
         return;
     }
     //将资源链接列表输出到本地txt文档`
-    writeLocalFile(url_list,"url_list.txt",g_downPath);
+    writeLocalFile(url_list,"url_list_"+host_now+".txt","\n",g_downPath+"/"+host_now);
 
     int cnt=0,nts = url_list.size();
 
@@ -342,9 +340,7 @@ list<string> getHttps(const vector<char> &vcontent,const char* type/*="images"*/
         begin = end+1;
     }
 #else
-    //按第一种规则查找超链接
-    // regex reg("<!.*?>"); //解析注释    
-    // regex reg("href=\\\".*?\\\""); //解析href超链接
+    //按第一种规则查找图片资源超链接    
     regex reg("url\\((.*?)\\)"); //解析url()资源地址
     sregex_iterator spos(pageContent.cbegin(),pageContent.cend(),reg);
     sregex_iterator send;
@@ -371,7 +367,7 @@ list<string> getHttps(const vector<char> &vcontent,const char* type/*="images"*/
         cnt = 0;
     }
 
-    //按第二种规则查找超链接
+    //按第二种规则查找图片资源超链接
     regex reg1("<img.*?src=\\\"(.*?)\\\""); //解析<img src="">资源地址
     sregex_iterator spos1(pageContent.cbegin(),pageContent.cend(),reg1);
     for(;spos1!=send;spos1++){
@@ -396,6 +392,33 @@ list<string> getHttps(const vector<char> &vcontent,const char* type/*="images"*/
         //重置重复计数cnt和查找位置begin
         cnt = 0;
     }
+    //查找超文本引用链接
+    list<string> href_list;
+    reg1 = regex("href=\\\"(.*?)\\\""); //解析href超链接
+    spos1 = sregex_iterator(pageContent.cbegin(),pageContent.cend(),reg1);
+    for(;spos1!=send;spos1++){
+        //cout << spos->str() << endl; //全匹配
+        url = spos1->str(1); //第一个分组
+        //去除url字符串中的'\'符号
+        url.erase(remove(url.begin(),url.end(),'\\'),url.end());
+        //去除url字符串中的‘
+        url.erase(remove(url.begin(),url.end(),'\''),url.end());
+        //去除不包含//的地址类型，如：#default#homepage
+        if(url.find("//") == np)
+            continue;
+        //保留//之后的地址
+        url = url.substr(url.find("//")+2);        
+        //排除重复元素
+        for(auto elmt:href_list)
+            if(elmt == url) cnt++;
+        if(cnt==0){
+            href_list.push_back(url);
+            // cout << url << endl;
+        }            
+        //重置重复计数cnt和查找位置begin
+        cnt = 0;
+    }
+    writeLocalFile(href_list,"href_list_"+host_now+".txt","",g_downPath+"/"+host_now);
 #endif
 
     return url_list;
@@ -414,7 +437,7 @@ void writeLocalFile(const string &content,const string &filename,const string &d
     cout << "created file: " << filepath << endl << endl;
 }
 
-void writeLocalFile(const list<string> &strlist,const string &filename,const string &downpath/*=defDownPath*/){
+void writeLocalFile(const list<string> &strlist,const string &filename,const char* suffix/*=""*/,const string &downpath/*=defDownPath*/){
     string filepath = downpath + '/' + filename;
     ofstream outfile(filepath,fstream::out);
     if(!outfile.is_open()){
@@ -425,10 +448,10 @@ void writeLocalFile(const list<string> &strlist,const string &filename,const str
     for(auto str:strlist)
         outfile << str << endl;
     outfile.close();
-    cout << "created file: " << filepath << endl << endl;
+    cout << "created file: " << filepath << suffix << endl;
 }
 
-void writeLocalFile(const vector<char> &vcontent,const string &filename,const string &downpath/*=defDownPath*/,const char* prefix/*=""*/){
+void writeLocalFile(const vector<char> &vcontent,const string &filename,const char* prefix/*=""*/,const string &downpath/*=defDownPath*/){
     string filepath = downpath + '/' + filename;
     ofstream outfile(filepath,fstream::out|fstream::binary);
     if(!outfile.is_open()){

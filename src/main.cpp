@@ -39,6 +39,6 @@ int main(int argc, char const *argv[])
     drawResources(vcontent);
     time_t t2 = time(0);
 
-    cout << "surfing finished. time used: " << t2-t1 << " ss." << endl;
+    cout << "surfing finished. time used: " << t2-t1 << " seconds." << endl;
     return 0;
 }
