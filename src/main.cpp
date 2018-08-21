@@ -32,13 +32,20 @@ int main(int argc, char const *argv[])
 			printf("dir created OK:%s\n",g_downPath.c_str());
     }
     
-    time_t t1 = time(0);
+    //struct timeval{tv.sec,tv.usec}; 秒数和微秒数
+    timeval tv1;
+    gettimeofday(&tv1,NULL); //sys/time.h
     //发送请求并获取应答  不论是网页还是资源 都会在本地生成
     vector<char> vcontent = getWebPage(url);
     //从html中抽取url_list，并循环请求获取url_list指向的资源
     drawResources(vcontent);
-    time_t t2 = time(0);
+    timeval tv2;
+    gettimeofday(&tv2,NULL);
 
-    cout << "surfing finished. time used: " << t2-t1 << " seconds." << endl;
+    cout.setf(ios::fixed); //自动补零
+    cout << "surfing finished. time used: "
+        << fixed << setprecision(2) //iomanip.h 2位小数精度
+        << double((tv2.tv_sec-tv1.tv_sec)*1000000 + tv2.tv_usec-tv1.tv_usec)/1000000 
+        << " seconds." << endl;
     return 0;
 }

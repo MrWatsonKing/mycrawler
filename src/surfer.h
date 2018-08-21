@@ -2,6 +2,7 @@
 #define SURFER_H
 
 #include <netdb.h>
+#include <sys/time.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -11,6 +12,7 @@
 #include <thread>
 #include <strings.h>
 #include <iostream>
+#include <iomanip>
 #include <fstream>
 #include <list>
 #include <vector>

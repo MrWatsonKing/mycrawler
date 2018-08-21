@@ -248,6 +248,7 @@ void drawResources(const vector<char> &vcontent){
 
 #if 1 //多线程 同步执行 函数结束前统一等待回收
     //等待线程汇合 可以确保主线程和进程不会在其他线程没有完全结束之前就退出
+    //因为主线程提前退出 导致进程退出 从而导致其他线程还没有执行完就被销毁了 所以分离线程不可行
     thread vts[nts];
     for(auto url:url_list){
         cnt++;
@@ -258,23 +259,16 @@ void drawResources(const vector<char> &vcontent){
     //函数返回之前 同步等待所有的线程执行完毕
     for(int i=0;i<nts;i++)
         vts[i].join();
-#else //单线程 顺序执行
-    // //分离线程 
-    // //因为主线程提前退出 导致进程退出 从而导致其他线程还没有执行完就被销毁了 不可行
-    // for(auto url:url_list){
-    //     cnt++;
-    //     cout << "\tdownloading file "<< cnt << ": "<< url << endl;
-    //     //对线程数组的每一个元素进行赋值 thread创建的时候 线程函数会自动调用并运行
-    //     thread(getWebPage,url).detach();
-    // }
-    //单线程 顺序执行    
+#else //单线程 顺序执行    
     for(auto url:url_list){
         cnt++;
         cout << "\tdownloading file "<< cnt << ": "<< url << endl;
         getWebPage(url);
     }
 #endif
-
+    //多线程 耗时 最长2.21秒 最短1.32秒
+    //单线程 耗时 最长3.31秒 最短2.06秒
+    //这表明多线程并发执行具有无可替代的速度优势
     cout << endl << "download over." << endl;
 }
 
