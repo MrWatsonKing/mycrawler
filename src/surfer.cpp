@@ -40,8 +40,8 @@ int connectHost(const string &url){
 vector<char> getWebPage(const string &url){
     //cout<<"\tthread_id: "<<this_thread::get_id()<<endl;
     vector<char> vbytes;
-    int len, BUFFER_SIZE=1024;
-    char buffer[BUFFER_SIZE];    
+    ssize_t len=0; int BUFLEN=2048;
+    char buffer[BUFLEN];    
     vector<char> vcontent;
     vector<char> vhttpHead;
 
@@ -88,15 +88,25 @@ vector<char> getWebPage(const string &url){
     struct timeval timeout={1,0};
     setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, (void *)&timeout, sizeof(struct timeval));
     //接收应答消息    
-    while((len = recv(sfd, buffer, BUFFER_SIZE-1, 0))>0){
+    while((len = recv(sfd, buffer, BUFLEN-10, 0))>0)
         for(int i=0;i<len;i++)
-            vbytes.push_back(buffer[i]);
-    }
+            vbytes.push_back(buffer[i]);    
     //断开连接
     close(sfd);
 
+    //检查对应文件夹是否存在 若不存在 则创建之
+    string downPath = g_downPath + "/" + host_now;
+    if(access(downPath.c_str(),R_OK|W_OK|X_OK) == -1){
+        if(mkdir(downPath.c_str(),0777) == -1)
+            perror("mkdir error");
+        else  
+            printf("dir created OK:%s\n",downPath.c_str());
+    }
+    //获取有效的文件名 如果存在%或=或? 都去除之 保留特殊符号前面的字符
+    string filename = pagePath.substr(pagePath.rfind("/")+1);
+    if(filename.size()==0) filename = host_now; //这种情况只会是html主页 不会是图片
 	//包含协议头的完整数据 写入本地文件
-	//writeLocalFile(vbytes,url+"_full.html","",g_downPath); //可写入\0字符
+	//writeLocalFile(vbytes,filename+"_full.txt","",downPath); //可写入\0字符
     
 	//将http协议头和网页内容分离
     int i=0;
@@ -161,40 +171,11 @@ vector<char> getWebPage(const string &url){
     }
     //得到内容
 	vcontent.insert(vcontent.end(),vbytes.begin()+i,vbytes.end());
-	
-    //检查对应文件夹是否存在 若不存在 则创建之
-    string downPath = g_downPath + "/" + host_now;
-    if(access(downPath.c_str(),R_OK|W_OK|X_OK) == -1){
-        if(mkdir(downPath.c_str(),0777) == -1)
-            perror("mkdir error");
-        else  
-            printf("dir created OK:%s\n",downPath.c_str());
-    }
-
+#if 1
     //如果是网页内容 就在本地生成网页文件 包括html或shtml
     if(requestHeader.find("html") != np){
-        //去除<!doctype html>前面和后面可能存在的数字
-        if(vcontent.size()>=10){
-            for(i=0;i<10;i++)
-                if(vcontent[i]=='<'){
-                    vcontent.erase(vcontent.begin(),vcontent.begin()+i);
-                    break;
-                }
-            int size = vcontent.size();
-            for(i=0;i<10;i++)
-                if(vcontent[size-1-i]=='>'){
-                    for(int j=0;j<i;j++)
-                        vcontent.pop_back();
-                    break;
-                }
-        //极端情况下 vbytes.size()<10，就直接退出            
-        }else{
-            cout << "\tError: reply.size()<10! download canceled." << endl << endl;
-            return vbytes;
-        }                   
-
         //将文件名中的/替换为.
-        string pageName = hostUrl+pagePath;
+        string pageName = hostUrl+pagePath;        
         size_t b=0, p=0;
         if(pageName.find("/") != np)            
             while(true){
@@ -217,9 +198,7 @@ vector<char> getWebPage(const string &url){
         }        
     }
 	//如果不是html 就生成本地文件 文件名为对应的资源文件名
-    else{        
-        //获取有效的文件名 如果存在%或=或? 都去除之 保留特殊符号前面的字符
-        string filename = pagePath.substr(pagePath.rfind("/")+1);
+    else{
         if(filename.find("%%") != np)
             filename = filename.substr(0,filename.rfind("%%"));
         if(filename.find("=") != np)
@@ -229,6 +208,7 @@ vector<char> getWebPage(const string &url){
 
         writeLocalFile(vcontent,filename,"\t",downPath);
     }                
+#endif
 
     return vcontent;
 }
@@ -297,7 +277,6 @@ void parseHostAndPagePath(const string& url, string &hostUrl, string &pagePath){
 
 //后续可以追加资源类型标签 分类获取不同类型的资源地址
 list<string> getHttps(const vector<char> &vcontent,const char* type/*="images"*/){
-
     string url,pageContent;
     for(int i=0;i<vcontent.size();i++)
         if(vcontent[i] != '\0')
@@ -306,7 +285,6 @@ list<string> getHttps(const vector<char> &vcontent,const char* type/*="images"*/
     list<string> url_list;
     size_t begin=0,end=0;
     int cnt = 0;
-
 #if 0    
     while(true){
         begin = pageContent.find("url(",begin);
@@ -360,7 +338,6 @@ list<string> getHttps(const vector<char> &vcontent,const char* type/*="images"*/
         //重置重复计数cnt和查找位置begin
         cnt = 0;
     }
-
     //按第二种规则查找图片资源超链接
     regex reg1("<img.*?src=\\\"(.*?)\\\""); //解析<img src="">资源地址
     sregex_iterator spos1(pageContent.cbegin(),pageContent.cend(),reg1);
@@ -447,7 +424,8 @@ void writeLocalFile(const list<string> &strlist,const string &filename,const cha
 
 void writeLocalFile(const vector<char> &vcontent,const string &filename,const char* prefix/*=""*/,const string &downpath/*=defDownPath*/){
     string filepath = downpath + '/' + filename;
-    ofstream outfile(filepath,fstream::out|fstream::binary);
+    ofstream outfile(filepath,fstream::out/*|fstream::binary*/);
+    //如果文件名中出现异常字符 就会报错
     if(!outfile.is_open()){
         cout << "file open error\n";
         outfile.close();
@@ -456,6 +434,7 @@ void writeLocalFile(const vector<char> &vcontent,const string &filename,const ch
     //图片格式中包含的\0都是有意义的，一个都不能少
     for(int i=0;i<vcontent.size();i++)
         outfile << vcontent[i];
+    
     outfile.close();
 	cout << prefix << "created file: " << filepath << endl;
 }
