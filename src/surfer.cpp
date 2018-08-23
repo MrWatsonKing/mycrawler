@@ -147,8 +147,6 @@ void drawResources(const string &scontent){
         cout << "found no urls in \"" << host_now << "\"" << endl;
         return;
     }
-    //将资源链接列表输出到本地txt文档`
-    writeLocalFile(url_list,"url_list_"+host_now+".txt","\n",g_downPath+"/"+host_now);
 
     int cnt=0,nts = url_list.size();
 
@@ -321,44 +319,30 @@ void checkDir(const string& dir){
 
 //后续可以追加资源类型标签 分类获取不同类型的资源地址
 list<string> getHttps(const string &scontent,const char* type/*="images"*/){
-    string url,pageContent;
-    for(int i=0;i<scontent.size();i++)
-        if(scontent[i] != '\0')
-            pageContent.push_back(scontent[i]);
-
     list<string> url_list;
-    size_t begin=0,end=0;
-    int cnt = 0;
-#if 0    
-    while(true){
-        begin = pageContent.find("url(",begin);
-        if(begin == np) break;
-        end = pageContent.find(")",begin);
-        url = pageContent.substr(begin+4,end-begin-4);
-        //去除url字符串中的'\'符号
-        url.erase(remove(url.begin(),url.end(),'\\'),url.end());
-        //去除url字符串中的‘
-        url.erase(remove(url.begin(),url.end(),'\''),url.end());
-        //去除不包含//的地址类型，如：#default#homepage
-        if(url.find("//") == np){
-            begin = end+1;
-            continue;
-        } 
-        //保留//之后的地址
-        url = url.substr(url.find("//")+2);        
-        //排除重复元素
-        for(auto elmt:url_list)
-            if(elmt == url) cnt++;
-        if(cnt==0)
-            url_list.push_back(url);
-        //重置重复计数cnt和查找位置begin
-        cnt = 0;
-        begin = end+1;
-    }
-#else
     //按第一种规则查找图片资源超链接    
     regex reg("url\\((.*?)\\)"); //解析url()资源地址
-    sregex_iterator spos(pageContent.cbegin(),pageContent.cend(),reg);
+    addStrElmts(scontent,url_list,reg);
+    //按第二种规则查找图片资源超链接
+    reg = regex("<img.*?src=\\\"(.*?)\\\""); //解析<img src="">资源地址
+    addStrElmts(scontent,url_list,reg);
+    //将url_list输出到本地
+    writeLocalFile(url_list,"list_urls_"+host_now+".txt","",g_downPath+"/"+host_now);
+
+    //查找超文本引用链接
+    list<string> href_list;
+    reg = regex("href=\\\"(.*?)\\\""); //解析href超链接
+    addStrElmts(scontent,href_list,reg);
+    //将href_list输出到本地
+    writeLocalFile(href_list,"list_hrefs_"+host_now+".txt","\n",g_downPath+"/"+host_now);
+
+    return url_list;
+}
+
+void addStrElmts(const string& content,list<string> &list,const regex &reg){
+    string url;
+    int cnt=0;
+    sregex_iterator spos(content.cbegin(),content.cend(),reg);
     sregex_iterator send;
     for(;spos!=send;spos++){
         //cout << spos->str() << endl; //全匹配
@@ -373,70 +357,15 @@ list<string> getHttps(const string &scontent,const char* type/*="images"*/){
         //保留//之后的地址
         url = url.substr(url.find("//")+2);        
         //排除重复元素
-        for(auto elmt:url_list)
+        for(auto elmt:list)
             if(elmt == url) cnt++;
         if(cnt==0){
-            url_list.push_back(url);
+            list.push_back(url);
             // cout << url << endl;
         }            
         //重置重复计数cnt和查找位置begin
         cnt = 0;
     }
-    //按第二种规则查找图片资源超链接
-    regex reg1("<img.*?src=\\\"(.*?)\\\""); //解析<img src="">资源地址
-    sregex_iterator spos1(pageContent.cbegin(),pageContent.cend(),reg1);
-    for(;spos1!=send;spos1++){
-        //cout << spos->str() << endl; //全匹配
-        url = spos1->str(1); //第一个分组
-        //去除url字符串中的'\'符号
-        url.erase(remove(url.begin(),url.end(),'\\'),url.end());
-        //去除url字符串中的‘
-        url.erase(remove(url.begin(),url.end(),'\''),url.end());
-        //去除不包含//的地址类型，如：#default#homepage
-        if(url.find("//") == np)
-            continue;
-        //保留//之后的地址
-        url = url.substr(url.find("//")+2);        
-        //排除重复元素
-        for(auto elmt:url_list)
-            if(elmt == url) cnt++;
-        if(cnt==0){
-            url_list.push_back(url);
-            // cout << url << endl;
-        }            
-        //重置重复计数cnt和查找位置begin
-        cnt = 0;
-    }
-    //查找超文本引用链接
-    list<string> href_list;
-    reg1 = regex("href=\\\"(.*?)\\\""); //解析href超链接
-    spos1 = sregex_iterator(pageContent.cbegin(),pageContent.cend(),reg1);
-    for(;spos1!=send;spos1++){
-        //cout << spos->str() << endl; //全匹配
-        url = spos1->str(1); //第一个分组
-        //去除url字符串中的'\'符号
-        url.erase(remove(url.begin(),url.end(),'\\'),url.end());
-        //去除url字符串中的‘
-        url.erase(remove(url.begin(),url.end(),'\''),url.end());
-        //去除不包含//的地址类型，如：#default#homepage
-        if(url.find("//") == np)
-            continue;
-        //保留//之后的地址
-        url = url.substr(url.find("//")+2);        
-        //排除重复元素
-        for(auto elmt:href_list)
-            if(elmt == url) cnt++;
-        if(cnt==0){
-            href_list.push_back(url);
-            // cout << url << endl;
-        }            
-        //重置重复计数cnt和查找位置begin
-        cnt = 0;
-    }
-    writeLocalFile(href_list,"href_list_"+host_now+".txt","",g_downPath+"/"+host_now);
-#endif
-
-    return url_list;
 }
 
 void writeLocalFile(const list<string> &strlist,const string &filename,const char* suffix/*=""*/,const string &downpath/*=defDownPath*/){
