@@ -39,71 +39,22 @@ int connectHost(const string &url){
 //获取网页
 string getWebPage(const string &url){
     //cout<<"\tthread_id: "<<this_thread::get_id()<<endl;
-    string sbytes;
-    ssize_t len=0; int BUFLEN=2048;
-    char buffer[BUFLEN];    
-    string scontent;
-    string shttpHead;
-
-    //连接主机
-    int sfd = connectHost(url);
-    if(sfd ==-1){
-        close(sfd);
-        return sbytes;
-    }
-
+    string sbytes;    
     string hostUrl, pagePath;
-    //将url解析为 主机名 和 网页路径
-    parseHostAndPagePath(url, hostUrl, pagePath);
-    //对"www.baidu.com"将不会进行处理
-    //hostUrl = "www.baidu.com"
-    //pagePath = "/"    
     
+    //将url解析为 主机名 和 网页路径
+    //对"www.baidu.com"将不会进行处理
+    //hostUrl = "www.baidu.com"   pagePath = "/"   
+    parseHostAndPagePath(url,hostUrl,pagePath);
+
     //创建https协议请求头 pagePath以/开头 hostUrl==www.baidu.com或baidu.com
-    string requestHeader;
-    requestHeader = "GET "+pagePath+" HTTP/1.1\r\n";
-    requestHeader += "Host: "+hostUrl+"\r\n";    
-    size_t pos = 0;
-    if((pos=pagePath.find(".png")) != np)
-        requestHeader += "Accept: image/png\r\n";
-    else if((pos=pagePath.find(".jpg")) != np)
-        requestHeader += "Accept: image/jpg\r\n";
-    else if((pos=pagePath.find(".gif")) != np)
-        requestHeader += "Accept: image/gif\r\n";
-    else if((pos=pagePath.find(".shtml")) != np)
-        requestHeader += "Accept: text/shtml\r\n";
-    else
-        requestHeader += "Accept: text/html\r\n";
-    requestHeader += "User-Agent: Mozilla/5.0\r\n";
-    requestHeader += "connection:close\r\n";
-    requestHeader += "\r\n";
-     
-    //发送协议头
-    if(send(sfd, requestHeader.c_str(), requestHeader.size(), 0)==-1){
-        cout<<"\tError: requestHeader send error!\n"<<endl;
-        return sbytes;
-    }
-    //设置socket选项
-    struct timeval timeout={1,0};
-    setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, (void *)&timeout, sizeof(struct timeval));
-    //接收应答消息    
-    while((len = recv(sfd, buffer, BUFLEN-10, 0))>0)
-        for(int i=0;i<len;i++)
-            sbytes.push_back(buffer[i]);    
-    //string中间也可以包含\0字符 cout<<string会将\0字符输出为空格
-    //所以在生成text文件时 可以使用cout 但生成图片文件时 则不能ofstream<<string 
-    //而必须逐字节将所有字符（包含\0）都完整输出    
-    //断开连接
-    close(sfd);
+    string request = prepareHead(pagePath,hostUrl);
+    sbytes = fetchData(request,url);
 
     //检查对应文件夹是否存在 若不存在 则创建之
     string downPath = g_downPath + "/" + host_now;
-    if(access(downPath.c_str(),R_OK|W_OK|X_OK) == -1){
-        if(mkdir(downPath.c_str(),0777) == -1)
-            perror("mkdir error");
-        else  
-            printf("dir created OK:%s\n",downPath.c_str());
-    }
+    checkDir(downPath);
+    
     //获取有效的文件名 如果存在%或=或? 都去除之 保留特殊符号前面的字符
     string filename = pagePath.substr(pagePath.rfind("/")+1);
     if(filename.size()==0) filename = host_now; //这种情况只会是html主页 不会是图片
@@ -120,9 +71,16 @@ string getWebPage(const string &url){
         cout << "\tError: reply.size()<4! download canceled." << endl;
         cout << "\tbuffer size=" << sbytes.size() << endl << endl;
         return sbytes;
-    }
+    }   
+        
+    //得到http协议头 并根据解析结果进行处理 
+    string reply,scontent;
+    reply.insert(reply.end(),sbytes.begin(),sbytes.begin()+i-1);
+    //如果reply结果不是200 就返回。
+    if(parseReply(reply) == -1) return sbytes;
 
-    if(requestHeader.find("html")!=np && (sbytes.find("chunked")!=np || sbytes.find("Chunked")!=np)){
+    //如果是分块传输 则对十六进制分块长度标记数进行处理
+    if(sbytes.find("chunked")!=np || sbytes.find("Chunked")!=np){
         //如果服务器按transfer-encoding:chunked 或 content-encoding:chunked 来分块发送数据包
         //则对数据包进行整理
         regex reg("\\r\\n[0-9a-fA-F]+\\r\\n");
@@ -135,62 +93,14 @@ string getWebPage(const string &url){
         sbytes = regex_replace(sbytes,reg,"");
         //为什么会把 200/r/n<! 替换掉？
         sbytes.insert(0,"<!");
-    }   
-        
-    //得到http协议头 并根据解析结果分别处理
-    shttpHead.insert(shttpHead.end(),sbytes.begin(),sbytes.begin()+i-1);
-    string httpHead = shttpHead.data();
-    string general = httpHead.substr(0,httpHead.find("\r\n"));
-    string server,date,contentType,contentLength,connection,location;
+    }
 
-    size_t start = httpHead.find("Server:"), end = 0;
-    if(start != np){
-        end = httpHead.find("\r\n",start);
-        server = httpHead.substr(start,end-start);
-    }    
-    start = httpHead.find("Date:");
-    if(start != np){
-        end = httpHead.find("\r\n",start);
-        date = httpHead.substr(start,end-start);
-    }
-    start = httpHead.find("Content-Type:");
-    if(start != np){
-        end = httpHead.find("\r\n",start);
-        contentType = httpHead.substr(start,end-start);
-    }
-    start = httpHead.find("Content-Length:");
-    if(start != np){
-        end = httpHead.find("\r\n",start);
-        contentLength = httpHead.substr(start,end-start);
-    }
-    start = httpHead.find("Connection:");
-    if(start != np){
-        end = httpHead.find("\r\n",start);
-        connection = httpHead.substr(start,end-start);
-    }
-    start = httpHead.find("Location:");
-    if(start != np){
-        end = httpHead.find("\r\n",start);
-        location = httpHead.substr(start,end-start);
-    }
-    //如果网页返回错误代码 输出查看当前httpHead 并返回
-    if(general.find("HTTP/1.1 200") == np){
-        cout << "\t" << "Error: resource not found! download canceled." << endl;
-        cout << "\t" << general << endl; //general是肯定存在的 后面的项目不一定存在
-        cout << "\t" << server << (server.size()>0 ? "\n\t":"");
-        cout << date << (date.size()>0 ? "\n\t":"");
-        cout << contentType << (contentType.size()>0 ? "\n\t":"");
-        cout << contentLength << (contentLength.size()>0 ? "\n\t":"");
-        cout << connection << (connection.size()>0 ? "\n\t":"");
-        cout << location << endl;
-        //注意：三目表达式 涉及到类型不同的 或者前扩 或者全扩 编译器才能正确解析 否则会报错
-        return sbytes;
-    }
-    //得到内容
+    //应答码==200 数据正常 则解析得到文件内容
 	scontent.insert(scontent.end(),sbytes.begin()+i,sbytes.end());
-#if 1
+
+#if 1 //生成本地文件与否
     //如果是网页内容 就在本地生成网页文件 包括html或shtml
-    if(requestHeader.find("html") != np){
+    if(request.find("html") != np){        
         //将文件名中的/替换为.
         string pageName = hostUrl+pagePath;        
         size_t b=0, p=0;
@@ -200,11 +110,10 @@ string getWebPage(const string &url){
                 if(b == np) break;
                 pageName.replace(b,1,".");
                 p = b+1;
-            }           
-        
+            }
         //将网页写入本地
         //请求.shtml时 pageName以.shtml结尾
-        if(requestHeader.find("shtml") != np)
+        if(request.find("shtml") != np)
             writeLocalFile(scontent,pageName,"",downPath);
         //找不到shtml 就是普通网页 以.html结尾  或 没有结尾
         else{
@@ -290,6 +199,124 @@ void parseHostAndPagePath(const string& url, string &hostUrl, string &pagePath){
     //对"www.baidu.com"将不会进行处理
     //hostUrl = "www.baidu.com"
     //pagePath = "/"
+}
+
+//准备好http协议请求头
+string prepareHead(const string &pagePath,const string &hostUrl){
+    string request;
+    request = "GET "+pagePath+" HTTP/1.1\r\n";
+    request += "Host: "+hostUrl+"\r\n";    
+    size_t pos = 0;
+    if((pos=pagePath.find(".png")) != np)
+        request += "Accept: image/png\r\n";
+    else if((pos=pagePath.find(".jpg")) != np)
+        request += "Accept: image/jpg\r\n";
+    else if((pos=pagePath.find(".gif")) != np)
+        request += "Accept: image/gif\r\n";
+    else if((pos=pagePath.find(".shtml")) != np)
+        request += "Accept: text/shtml\r\n";
+    else
+        request += "Accept: text/html\r\n";
+    request += "User-Agent: Mozilla/5.0\r\n";
+    request += "connection:close\r\n";
+    request += "\r\n";
+
+    return request;
+}
+
+//发送http请求头 并获取数据
+string fetchData(const string& request,const string& url){
+    ssize_t len=0;
+    int BUFLEN=2048;
+    char buffer[BUFLEN];
+    string sbytes;
+
+    //连接主机
+    int sfd = connectHost(url);
+    if(sfd ==-1){
+        close(sfd);
+        return sbytes;
+    }
+
+    //发送协议头
+    if(send(sfd, request.c_str(), request.size(), 0)==-1){
+        cout<<"\tError: request send error!\n"<<endl;
+        return sbytes;
+    }
+    //设置socket选项
+    struct timeval timeout={1,0};
+    setsockopt(sfd, SOL_SOCKET, SO_RCVTIMEO, (void *)&timeout, sizeof(struct timeval));
+    //接收应答消息    
+    while((len = recv(sfd, buffer, BUFLEN-10, 0))>0)
+        for(int i=0;i<len;i++)
+            sbytes.push_back(buffer[i]);    
+    //string中间也可以包含\0字符 cout<<string会将\0字符输出为空格
+    //所以在生成text文件时 可以使用cout 但生成图片文件时 则不能ofstream<<string 
+    //而必须逐字节将所有字符（包含\0）都完整输出    
+    //断开连接
+    close(sfd);
+    
+    return sbytes;
+}
+
+int parseReply(const string& reply){
+    string general = reply.substr(0,reply.find("\r\n"));
+    string server,date,contentType,contentLength,connection,location;
+
+    size_t start = reply.find("Server:"), end = 0;
+    if(start != np){
+        end = reply.find("\r\n",start);
+        server = reply.substr(start,end-start);
+    }    
+    start = reply.find("Date:");
+    if(start != np){
+        end = reply.find("\r\n",start);
+        date = reply.substr(start,end-start);
+    }
+    start = reply.find("Content-Type:");
+    if(start != np){
+        end = reply.find("\r\n",start);
+        contentType = reply.substr(start,end-start);
+    }
+    start = reply.find("Content-Length:");
+    if(start != np){
+        end = reply.find("\r\n",start);
+        contentLength = reply.substr(start,end-start);
+    }
+    start = reply.find("Connection:");
+    if(start != np){
+        end = reply.find("\r\n",start);
+        connection = reply.substr(start,end-start);
+    }
+    start = reply.find("Location:");
+    if(start != np){
+        end = reply.find("\r\n",start);
+        location = reply.substr(start,end-start);
+    }
+    //如果网页返回错误代码 输出查看当前httpHead 并返回
+    if(general.find("HTTP/1.1 200") == np){
+        cout << "\t" << "Error: resource not found! download canceled." << endl;
+        cout << "\t" << general << endl; //general是肯定存在的 后面的项目不一定存在
+        cout << "\t" << server << (server.size()>0 ? "\n\t":"");
+        cout << date << (date.size()>0 ? "\n\t":"");
+        cout << contentType << (contentType.size()>0 ? "\n\t":"");
+        cout << contentLength << (contentLength.size()>0 ? "\n\t":"");
+        cout << connection << (connection.size()>0 ? "\n\t":"");
+        cout << location << endl;
+        //注意：三目表达式 涉及到类型不同的 或者前扩 或者全扩 编译器才能正确解析 否则会报错
+        return -1;
+    }
+
+    return 0;
+}
+
+void checkDir(const string& dir){
+    if(access(dir.c_str(),R_OK|W_OK|X_OK) == -1){
+        if(mkdir(dir.c_str(),0777) == -1)
+            perror("mkdir error");
+        else  
+            printf("dir created OK:%s\n",dir.c_str());
+    }
 }
 
 //后续可以追加资源类型标签 分类获取不同类型的资源地址

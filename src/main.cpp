@@ -28,13 +28,7 @@ int main(int argc, char const *argv[])
     //检查下载路径 若不存在 则创建之
     char cwd[128] = {0};
     g_downPath = string(getcwd(cwd,128)) + "/download";
-    if(access(g_downPath.c_str(),R_OK|W_OK|X_OK) == -1){
-        if(mkdir(g_downPath.c_str(),0777) == -1){
-            perror("mkdir error");
-            return -1;
-        }else
-			printf("dir created OK:%s\n",g_downPath.c_str());
-    }
+    checkDir(g_downPath);
     
     //struct timeval{tv.sec,tv.usec}; 秒数和微秒数
     timeval tv1;

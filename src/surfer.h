@@ -23,8 +23,13 @@ int connectHost(const string &url);
 string getWebPage(const string &url); //局部变量只能返回值 不能返回引用
 void drawResources(const string &scontent);
 void parseHostAndPagePath(const string &url, string &hostUrl, string &pagePath);
+string prepareHead(const string &pagePath,const string &hostUrl);
+string fetchData(const string& request,const string& url);
+int parseReply(const string& reply);
+void checkDir(const string& dir);
 list<string> getHttps(const string &vcontent,const char* type="images");
 void writeLocalFile(const list<string> &strlist,const string &filename,const char* suffix="",const string &downpath=defDownPath);
 void writeLocalFile(const string &scontent,const string &filename,const char* prefix="",const string &downpath=defDownPath);
+
 
 #endif //SURFER_H
