@@ -14,11 +14,15 @@ int main(int argc, char const *argv[])
         if(ret == -1) break;
     }
 
+#if 0
     if(argc != 2){
         cout << "usage: surf <url>" << endl;
         return -1;
     }
     string url(argv[1]);
+#else
+    string url("www.baidu.com");
+#endif
     host_now = url.substr(0,url.find("/"));
     
     //检查下载路径 若不存在 则创建之
@@ -36,9 +40,9 @@ int main(int argc, char const *argv[])
     timeval tv1;
     gettimeofday(&tv1,NULL); //sys/time.h
     //发送请求并获取应答  不论是网页还是资源 都会在本地生成
-    vector<char> vcontent = getWebPage(url);
+    string scontent = getWebPage(url);
     //从html中抽取url_list，并循环请求获取url_list指向的资源
-    drawResources(vcontent);
+    drawResources(scontent);
     timeval tv2;
     gettimeofday(&tv2,NULL);
 

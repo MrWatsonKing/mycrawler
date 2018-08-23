@@ -37,22 +37,21 @@ int connectHost(const string &url){
 }
 
 //获取网页
-vector<char> getWebPage(const string &url){
+string getWebPage(const string &url){
     //cout<<"\tthread_id: "<<this_thread::get_id()<<endl;
-    vector<char> vbytes;
+    string sbytes;
     ssize_t len=0; int BUFLEN=2048;
     char buffer[BUFLEN];    
-    vector<char> vcontent;
-    vector<char> vhttpHead;
+    string scontent;
+    string shttpHead;
 
     //连接主机
     int sfd = connectHost(url);
     if(sfd ==-1){
         close(sfd);
-        return vbytes;
+        return sbytes;
     }
 
-    struct hostent *host;
     string hostUrl, pagePath;
     //将url解析为 主机名 和 网页路径
     parseHostAndPagePath(url, hostUrl, pagePath);
@@ -82,7 +81,7 @@ vector<char> getWebPage(const string &url){
     //发送协议头
     if(send(sfd, requestHeader.c_str(), requestHeader.size(), 0)==-1){
         cout<<"\tError: requestHeader send error!\n"<<endl;
-        return vbytes;
+        return sbytes;
     }
     //设置socket选项
     struct timeval timeout={1,0};
@@ -90,7 +89,10 @@ vector<char> getWebPage(const string &url){
     //接收应答消息    
     while((len = recv(sfd, buffer, BUFLEN-10, 0))>0)
         for(int i=0;i<len;i++)
-            vbytes.push_back(buffer[i]);    
+            sbytes.push_back(buffer[i]);    
+    //string中间也可以包含\0字符 cout<<string会将\0字符输出为空格
+    //所以在生成text文件时 可以使用cout 但生成图片文件时 则不能ofstream<<string 
+    //而必须逐字节将所有字符（包含\0）都完整输出    
     //断开连接
     close(sfd);
 
@@ -106,23 +108,38 @@ vector<char> getWebPage(const string &url){
     string filename = pagePath.substr(pagePath.rfind("/")+1);
     if(filename.size()==0) filename = host_now; //这种情况只会是html主页 不会是图片
 	//包含协议头的完整数据 写入本地文件
-	//writeLocalFile(vbytes,filename+"_full.txt","",downPath); //可写入\0字符
+	//writeLocalFile(sbytes,filename+"_full.txt","",downPath); //可写入\0字符
     
 	//将http协议头和网页内容分离
     int i=0;
-    if(vbytes.size()>=4){
-    	for(i=4;i<vbytes.size();i++)
-	    	if(vbytes[i-4]=='\r' && vbytes[i-3]=='\n' && vbytes[i-2]=='\r' && vbytes[i-1]=='\n')
+    if(sbytes.size()>=4){
+    	for(i=4;i<sbytes.size();i++)
+	    	if(sbytes[i-4]=='\r' && sbytes[i-3]=='\n' && sbytes[i-2]=='\r' && sbytes[i-1]=='\n')
 		    	break;
     }else{
         cout << "\tError: reply.size()<4! download canceled." << endl;
-        cout << "\tbuffer size=" << vbytes.size() << endl << endl;
-        return vbytes;
+        cout << "\tbuffer size=" << sbytes.size() << endl << endl;
+        return sbytes;
     }
 
+    if(requestHeader.find("html")!=np && (sbytes.find("chunked")!=np || sbytes.find("Chunked")!=np)){
+        //如果服务器按transfer-encoding:chunked 或 content-encoding:chunked 来分块发送数据包
+        //则对数据包进行整理
+        regex reg("\\r\\n[0-9a-fA-F]+\\r\\n");
+        // sregex_iterator it(sbytes.begin(),sbytes.end(),reg);
+        // sregex_iterator end;
+        // for(;it!=end;it++){
+        //     cout << it->str(1);
+        // }
+        //此函数第一个参数以const方式传入 不会改变自身的值
+        sbytes = regex_replace(sbytes,reg,"");
+        //为什么会把 200/r/n<! 替换掉？
+        sbytes.insert(0,"<!");
+    }   
+        
     //得到http协议头 并根据解析结果分别处理
-    vhttpHead.insert(vhttpHead.end(),vbytes.begin(),vbytes.begin()+i-1);
-    string httpHead = vhttpHead.data();
+    shttpHead.insert(shttpHead.end(),sbytes.begin(),sbytes.begin()+i-1);
+    string httpHead = shttpHead.data();
     string general = httpHead.substr(0,httpHead.find("\r\n"));
     string server,date,contentType,contentLength,connection,location;
 
@@ -167,10 +184,10 @@ vector<char> getWebPage(const string &url){
         cout << connection << (connection.size()>0 ? "\n\t":"");
         cout << location << endl;
         //注意：三目表达式 涉及到类型不同的 或者前扩 或者全扩 编译器才能正确解析 否则会报错
-        return vbytes;
+        return sbytes;
     }
     //得到内容
-	vcontent.insert(vcontent.end(),vbytes.begin()+i,vbytes.end());
+	scontent.insert(scontent.end(),sbytes.begin()+i,sbytes.end());
 #if 1
     //如果是网页内容 就在本地生成网页文件 包括html或shtml
     if(requestHeader.find("html") != np){
@@ -188,13 +205,13 @@ vector<char> getWebPage(const string &url){
         //将网页写入本地
         //请求.shtml时 pageName以.shtml结尾
         if(requestHeader.find("shtml") != np)
-            writeLocalFile(vcontent,pageName,"",downPath);
+            writeLocalFile(scontent,pageName,"",downPath);
         //找不到shtml 就是普通网页 以.html结尾  或 没有结尾
         else{
             if(pageName.find("html") == np) //pagePath=/ 或xxx/ /都已经替换成.
-                writeLocalFile(vcontent,pageName+"html","",downPath);
+                writeLocalFile(scontent,pageName+"html","",downPath);
             else //pagePath = xxx.html
-                writeLocalFile(vcontent,pageName,"",downPath);
+                writeLocalFile(scontent,pageName,"",downPath);
         }        
     }
 	//如果不是html 就生成本地文件 文件名为对应的资源文件名
@@ -206,17 +223,17 @@ vector<char> getWebPage(const string &url){
         if(filename.find("?") != np)
             filename = filename.substr(0,filename.rfind("?"));
 
-        writeLocalFile(vcontent,filename,"\t",downPath);
+        writeLocalFile(scontent,filename,"\t",downPath);
     }                
 #endif
 
-    return vcontent;
+    return scontent;
 }
 
 //抽取网页资源
-void drawResources(const vector<char> &vcontent){
+void drawResources(const string &scontent){
     //获取页面内容中的https     
-    list<string> url_list = getHttps(vcontent); 
+    list<string> url_list = getHttps(scontent); 
     if(url_list.size() == 0){
         cout << "found no urls in \"" << host_now << "\"" << endl;
         return;
@@ -276,11 +293,11 @@ void parseHostAndPagePath(const string& url, string &hostUrl, string &pagePath){
 }
 
 //后续可以追加资源类型标签 分类获取不同类型的资源地址
-list<string> getHttps(const vector<char> &vcontent,const char* type/*="images"*/){
+list<string> getHttps(const string &scontent,const char* type/*="images"*/){
     string url,pageContent;
-    for(int i=0;i<vcontent.size();i++)
-        if(vcontent[i] != '\0')
-            pageContent.push_back(vcontent[i]);
+    for(int i=0;i<scontent.size();i++)
+        if(scontent[i] != '\0')
+            pageContent.push_back(scontent[i]);
 
     list<string> url_list;
     size_t begin=0,end=0;
@@ -395,19 +412,6 @@ list<string> getHttps(const vector<char> &vcontent,const char* type/*="images"*/
     return url_list;
 }
 
-void writeLocalFile(const string &content,const string &filename,const string &downpath/*=defDownPath*/){
-    string filepath = downpath + '/' + filename;
-    ofstream outfile(filepath,fstream::out);
-    if(!outfile.is_open()){
-        cout << "file open error\n";
-        outfile.close();
-        return;
-    }
-    outfile << content;
-    outfile.close();
-    cout << "created file: " << filepath << endl << endl;
-}
-
 void writeLocalFile(const list<string> &strlist,const string &filename,const char* suffix/*=""*/,const string &downpath/*=defDownPath*/){
     string filepath = downpath + '/' + filename;
     ofstream outfile(filepath,fstream::out);
@@ -422,7 +426,7 @@ void writeLocalFile(const list<string> &strlist,const string &filename,const cha
     cout << "created file: " << filepath << suffix << endl;
 }
 
-void writeLocalFile(const vector<char> &vcontent,const string &filename,const char* prefix/*=""*/,const string &downpath/*=defDownPath*/){
+void writeLocalFile(const string &scontent,const string &filename,const char* prefix/*=""*/,const string &downpath/*=defDownPath*/){
     string filepath = downpath + '/' + filename;
     ofstream outfile(filepath,fstream::out/*|fstream::binary*/);
     //如果文件名中出现异常字符 就会报错
@@ -432,8 +436,8 @@ void writeLocalFile(const vector<char> &vcontent,const string &filename,const ch
         return;
     }
     //图片格式中包含的\0都是有意义的，一个都不能少
-    for(int i=0;i<vcontent.size();i++)
-        outfile << vcontent[i];
+    for(int i=0;i<scontent.size();i++)
+        outfile << scontent[i];
     
     outfile.close();
 	cout << prefix << "created file: " << filepath << endl;
