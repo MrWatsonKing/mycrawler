@@ -115,6 +115,8 @@ string getWebPage(const string &url){
         //请求.shtml时 pageName以.shtml结尾
         if(request.find("shtml") != np)
             writeLocalFile(scontent,pageName,"",downPath);
+        else if(pagePath.substr(pagePath.rfind(".")) == string(".htm"))
+            writeLocalFile(scontent,pageName,"",downPath);
         //找不到shtml 就是普通网页 以.html结尾  或 没有结尾
         else{
             if(pageName.find("html") == np) //pagePath=/ 或xxx/ /都已经替换成.
@@ -126,11 +128,11 @@ string getWebPage(const string &url){
 	//如果不是html 就生成本地文件 文件名为对应的资源文件名
     else{
         if(filename.find("%%") != np)
-            filename = filename.substr(0,filename.rfind("%%"));
-        if(filename.find("=") != np)
-            filename = filename.substr(0,filename.rfind("="));
-        if(filename.find("?") != np)
-            filename = filename.substr(0,filename.rfind("?"));
+            filename = filename.substr(filename.rfind("%%")+1);
+        // if(filename.find("=") != np)
+        //     filename = filename.substr(0,filename.rfind("="));
+        // if(filename.find("?") != np)
+        //     filename = filename.substr(0,filename.rfind("?"));
 
         writeLocalFile(scontent,filename,"\t",downPath);
     }                
@@ -182,15 +184,15 @@ void parseHostAndPagePath(const string& url, string &hostUrl, string &pagePath){
     pagePath="/";
     //查找协议前缀 如果找到了 将协议前缀置换为空
     size_t pos=hostUrl.find("http://");
-    if(pos != np)
+    if(pos != np) 
         hostUrl=hostUrl.replace(pos,7,"");
-    pos=hostUrl.find("https://");
-    if(pos != np)
-        hostUrl=hostUrl.replace(pos,8,"");
+    else{
+        pos=hostUrl.find("https://");
+        if(pos != np) hostUrl=hostUrl.replace(pos,8,"");
+    }
+
     //找到主机url中的第一个层次划分
-    pos=hostUrl.find("/");
-    //如果存在层次划分 则分别重置页面路径和主机地址
-    if(pos != np){
+    if((pos=hostUrl.find("/"))!=np){
         pagePath=hostUrl.substr(pos);
         hostUrl=hostUrl.substr(0,pos);
     }
@@ -219,6 +221,7 @@ string prepareHead(const string &pagePath,const string &hostUrl){
     request += "connection:close\r\n";
     request += "\r\n";
 
+    //cout << request << endl << endl;
     return request;
 }
 
@@ -327,14 +330,16 @@ list<string> getHttps(const string &scontent,const char* type/*="images"*/){
     reg = regex("<img.*?src=\\\"(.*?)\\\""); //解析<img src="">资源地址
     addStrElmts(scontent,url_list,reg);
     //将url_list输出到本地
-    writeLocalFile(url_list,"list_urls_"+host_now+".txt","",g_downPath+"/"+host_now);
+    if(url_list.size()>0)
+        writeLocalFile(url_list,"list_urls_"+host_now+".txt","",g_downPath+"/"+host_now);
 
     //查找超文本引用链接
     list<string> href_list;
     reg = regex("href=\\\"(.*?)\\\""); //解析href超链接
     addStrElmts(scontent,href_list,reg);
     //将href_list输出到本地
-    writeLocalFile(href_list,"list_hrefs_"+host_now+".txt","\n",g_downPath+"/"+host_now);
+    if(href_list.size()>0)
+        writeLocalFile(href_list,"list_hrefs_"+host_now+".txt","\n",g_downPath+"/"+host_now);
 
     return url_list;
 }
@@ -352,10 +357,11 @@ void addStrElmts(const string& content,list<string> &list,const regex &reg){
         //去除url字符串中的‘
         url.erase(remove(url.begin(),url.end(),'\''),url.end());
         //去除不包含//的地址类型，如：#default#homepage
-        if(url.find("//") == np)
-            continue;         
-        //保留//之后的地址
-        url = url.substr(url.find("//")+2);        
+        if(url.find("//") != np)
+            url = url.substr(url.find("//")+2);
+        //如果url为空字符串 就直接跳过 继续处理下一个
+        if(url.size()==0 || url==string("#") || url==string("/")) continue;
+
         //排除重复元素
         for(auto elmt:list)
             if(elmt == url) cnt++;

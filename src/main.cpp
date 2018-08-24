@@ -14,7 +14,7 @@ int main(int argc, char const *argv[])
         if(ret == -1) break;
     }
 
-#if 0
+#if 1
     if(argc != 2){
         cout << "usage: surf <url>" << endl;
         return -1;
@@ -23,8 +23,12 @@ int main(int argc, char const *argv[])
 #else
     string url("www.baidu.com");
 #endif
-    host_now = url.substr(0,url.find("/"));
-    
+    size_t s;
+    if((s=url.find("//")) == string::npos)
+        host_now = url.substr(0,url.find("/"));
+    else
+        host_now = url.substr(s+2,url.find("/",s+2)-s-2);
+
     //检查下载路径 若不存在 则创建之
     char cwd[128] = {0};
     g_downPath = string(getcwd(cwd,128)) + "/download";
