@@ -38,6 +38,7 @@ int connectHost(const string &url){
 
 //获取网页
 string getWebPage(const string &url){
+    // cout << "getwebpage:" << endl;
     //cout<<"\tthread_id: "<<this_thread::get_id()<<endl;
     string sbytes;    
     string hostUrl, pagePath;
@@ -97,6 +98,7 @@ string getWebPage(const string &url){
 
     //应答码==200 数据正常 则解析得到文件内容
 	scontent.insert(scontent.end(),sbytes.begin()+i,sbytes.end());
+    // cout << "\tget scontent." << endl;
 
 #if 1 //生成本地文件与否
     //如果是网页内容 就在本地生成网页文件 包括html或shtml
@@ -111,11 +113,15 @@ string getWebPage(const string &url){
                 pageName.replace(b,1,".");
                 p = b+1;
             }
+        // cout << "\tready to write html." << endl;
         //将网页写入本地
         //请求.shtml时 pageName以.shtml结尾
         if(request.find("shtml") != np)
             writeLocalFile(scontent,pageName,"",downPath);
-        else if(pagePath.substr(pagePath.rfind(".")) == string(".htm"))
+        //注意：string string::substr(size_t pos,size_t len) const中的pos参数
+        //pos取值范围[0,str.length()] 如果 pos==(size_t)-1或pos>str.length()
+        //就会抛出out_of_range异常
+        else if(pagePath.substr(pagePath.rfind(".")+1) == string("htm"))
             writeLocalFile(scontent,pageName,"",downPath);
         //找不到shtml 就是普通网页 以.html结尾  或 没有结尾
         else{
@@ -127,6 +133,7 @@ string getWebPage(const string &url){
     }
 	//如果不是html 就生成本地文件 文件名为对应的资源文件名
     else{
+        // cout << "\tready to write image." << endl;
         if(filename.find("%%") != np)
             filename = filename.substr(filename.rfind("%%")+1);
         // if(filename.find("=") != np)
@@ -389,7 +396,7 @@ void writeLocalFile(const list<string> &strlist,const string &filename,const cha
 }
 
 void writeLocalFile(const string &scontent,const string &filename,const char* prefix/*=""*/,const string &downpath/*=defDownPath*/){
-    string filepath = downpath + '/' + filename;
+    string filepath = downpath + '/' + filename;    
     ofstream outfile(filepath,fstream::out/*|fstream::binary*/);
     //如果文件名中出现异常字符 就会报错
     if(!outfile.is_open()){
@@ -397,6 +404,7 @@ void writeLocalFile(const string &scontent,const string &filename,const char* pr
         outfile.close();
         return;
     }
+    // cout << "\tready to create file." << endl;
     //图片格式中包含的\0都是有意义的，一个都不能少
     for(int i=0;i<scontent.size();i++)
         outfile << scontent[i];
