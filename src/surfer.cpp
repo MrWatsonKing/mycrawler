@@ -11,7 +11,7 @@ int connectHost(const string &url){
     parseHostAndPagePath(url, hostUrl, pagePath);    
     //通过主机名获取主机地址 失败则返回
     if(0==(host=gethostbyname(hostUrl.c_str()))){
-        cout<<"gethostbyname error\n"<<endl;
+        cout<<"\tError: failed to gethostbyname.\n"<<endl;
         return -1;
     }
 
